@@ -1,0 +1,188 @@
+using System;
+using System.IO;
+using System.Collections.Generic;
+using System.Text;
+
+namespace LexicalAnalyzer
+{
+    // Define token types
+    public enum TokenType
+    {
+        IDENTIFIER, NUMBER, OPERATOR, KEYWORD, STRING_LITERAL, COMMENT,
+        PARENTHESIS, BRACKET, BRACE, SEMICOLON, COMMA, EOF, UNKNOWN
+    }
+
+    // Token class
+    public class Token
+    {
+        public TokenType Type { get; }
+        public string Value { get; }
+        public int Line { get; }
+        public int Column { get; }
+
+        public Token(TokenType type, string value, int line, int column)
+        {
+            Type = type;
+            Value = value;
+            Line = line;
+            Column = column;
+        }
+
+        public override string ToString() => $"Token({Type}, '{Value}', Line={Line}, Column={Column})";
+    }
+
+    public class LexicalAnalyzer
+    {
+        private readonly StreamReader _reader;
+        private int _line = 1, _column = 0;
+        private char _currentChar;
+        private readonly HashSet<string> _keywords = new() { "if", "else", "while", "for", "return", "int", "string", "bool", "class", "void" };
+        private readonly HashSet<char> _operators = new() { '+', '-', '*', '/', '%', '=', '>', '<', '!', '&', '|' };
+
+        public LexicalAnalyzer(string filePath)
+        {
+            _reader = new StreamReader(filePath);
+            Advance(); // Load first character
+        }
+
+        private void Advance()
+        {
+            int nextChar = _reader.Read();
+            _currentChar = nextChar == -1 ? '\0' : (char)nextChar;
+            _column++;
+            if (_currentChar == '\n') { _line++; _column = 0; }
+        }
+
+        private void SkipWhitespace()
+        {
+            while (char.IsWhiteSpace(_currentChar)) Advance();
+        }
+
+        public Token GetNextToken()
+        {
+            SkipWhitespace();
+
+            if (_currentChar == '\0') return new Token(TokenType.EOF, "EOF", _line, _column);
+
+            int startLine = _line, startColumn = _column;
+
+            if (char.IsLetter(_currentChar) || _currentChar == '_') return ScanIdentifierOrKeyword(startLine, startColumn);
+            if (char.IsDigit(_currentChar)) return ScanNumber(startLine, startColumn);
+            if (_currentChar == '"') return ScanStringLiteral(startLine, startColumn);
+            if (_currentChar == '/' && PeekNext() == '/') return ScanSingleLineComment(startLine, startColumn);
+            if (_operators.Contains(_currentChar)) return ScanOperator(startLine, startColumn);
+
+            return ScanSingleCharacterToken(startLine, startColumn);
+        }
+
+        private char PeekNext()
+        {
+            int nextChar = _reader.Peek();
+            return nextChar == -1 ? '\0' : (char)nextChar;
+        }
+
+        private Token ScanIdentifierOrKeyword(int line, int column)
+        {
+            StringBuilder value = new();
+            while (char.IsLetterOrDigit(_currentChar) || _currentChar == '_')
+            {
+                value.Append(_currentChar);
+                Advance();
+            }
+            string lexeme = value.ToString();
+            return new Token(_keywords.Contains(lexeme) ? TokenType.KEYWORD : TokenType.IDENTIFIER, lexeme, line, column);
+        }
+
+        private Token ScanNumber(int line, int column)
+        {
+            StringBuilder value = new();
+            while (char.IsDigit(_currentChar))
+            {
+                value.Append(_currentChar);
+                Advance();
+            }
+            return new Token(TokenType.NUMBER, value.ToString(), line, column);
+        }
+
+        private Token ScanStringLiteral(int line, int column)
+        {
+            StringBuilder value = new();
+            Advance(); // Skip opening quote
+            while (_currentChar != '"' && _currentChar != '\0')
+            {
+                value.Append(_currentChar);
+                Advance();
+            }
+            Advance(); // Skip closing quote
+            return new Token(TokenType.STRING_LITERAL, value.ToString(), line, column);
+        }
+
+        private Token ScanSingleLineComment(int line, int column)
+        {
+            StringBuilder value = new();
+            while (_currentChar != '\n' && _currentChar != '\0')
+            {
+                value.Append(_currentChar);
+                Advance();
+            }
+            return new Token(TokenType.COMMENT, value.ToString(), line, column);
+        }
+
+        private Token ScanOperator(int line, int column)
+        {
+            char firstChar = _currentChar;
+            Advance();
+            if (PeekNext() == '=' || (firstChar == '&' && _currentChar == '&') || (firstChar == '|' && _currentChar == '|'))
+            {
+                char secondChar = _currentChar;
+                Advance();
+                return new Token(TokenType.OPERATOR, $"{firstChar}{secondChar}", line, column);
+            }
+            return new Token(TokenType.OPERATOR, firstChar.ToString(), line, column);
+        }
+
+        private Token ScanSingleCharacterToken(int line, int column)
+        {
+            char value = _currentChar;
+            TokenType type = value switch
+            {
+                '(' or ')' => TokenType.PARENTHESIS,
+                '{' or '}' => TokenType.BRACE,
+                '[' or ']' => TokenType.BRACKET,
+                ';' => TokenType.SEMICOLON,
+                ',' => TokenType.COMMA,
+                _ => TokenType.UNKNOWN
+            };
+            Advance();
+            return new Token(type, value.ToString(), line, column);
+        }
+
+        public void Close() => _reader.Close();
+    }
+
+    class Program
+    {
+        static void Main()
+        {
+            string filePath = "week3/code.txt";
+
+            if (!File.Exists(filePath))
+            {
+                Console.WriteLine($"Error: File '{filePath}' not found.");
+                return;
+            }
+
+            using LexicalAnalyzer analyzer = new(filePath);
+            Token token;
+            int tokenCount = 0;
+
+            while ((token = analyzer.GetNextToken()).Type != TokenType.EOF)
+            {
+                Console.WriteLine(token);
+                tokenCount++;
+            }
+
+            Console.WriteLine($"Analysis complete. Found {tokenCount} tokens.");
+        }
+    }
+}
