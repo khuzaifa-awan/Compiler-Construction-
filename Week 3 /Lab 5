@@ -1,0 +1,242 @@
+using System;
+using System.Collections.Generic;
+
+namespace SymbolTable
+{
+    /// <summary>
+    /// Simple Hash Symbol Table (Dictionary) using Linked Lists for Collision Handling.
+    /// </summary>
+    public class SimpleHashTable<TKey, TValue>
+    {
+        private class Node
+        {
+            public TKey Key { get; set; }
+            public TValue Value { get; set; }
+            public Node Next { get; set; }
+
+            public Node(TKey key, TValue value, Node next = null)
+            {
+                Key = key;
+                Value = value;
+                Next = next;
+            }
+        }
+
+        private Node[] buckets; // Array of linked list nodes
+        private int count;
+        private int capacity;
+        private const double LoadFactor = 0.75;
+
+        public SimpleHashTable(int initialCapacity = 16)
+        {
+            capacity = initialCapacity;
+            buckets = new Node[capacity];
+            count = 0;
+        }
+
+        /// <summary>
+        /// Returns total number of key-value pairs.
+        /// </summary>
+        public int Count => count;
+
+        /// <summary>
+        /// Checks if the table is empty.
+        /// </summary>
+        public bool IsEmpty() => count == 0;
+
+        /// <summary>
+        /// Simple hash function to get index for key.
+        /// </summary>
+        private int GetIndex(TKey key)
+        {
+            return Math.Abs(key.GetHashCode()) % capacity;
+        }
+
+        /// <summary>
+        /// Adds or updates a key-value pair in the hash table.
+        /// </summary>
+        public void Add(TKey key, TValue value)
+        {
+            if (key == null) throw new ArgumentNullException(nameof(key));
+
+            if ((double)count / capacity >= LoadFactor)
+                Resize(capacity * 2); // Double the size if needed
+
+            int index = GetIndex(key);
+            Node current = buckets[index];
+
+            while (current != null)
+            {
+                if (current.Key.Equals(key))
+                {
+                    current.Value = value; // Update existing key
+                    return;
+                }
+                current = current.Next;
+            }
+
+            // Insert new key at the beginning of the linked list
+            buckets[index] = new Node(key, value, buckets[index]);
+            count++;
+        }
+
+        /// <summary>
+        /// Gets value associated with the key. Throws an exception if not found.
+        /// </summary>
+        public TValue Get(TKey key)
+        {
+            if (key == null) throw new ArgumentNullException(nameof(key));
+
+            int index = GetIndex(key);
+            Node current = buckets[index];
+
+            while (current != null)
+            {
+                if (current.Key.Equals(key)) return current.Value;
+                current = current.Next;
+            }
+
+            throw new KeyNotFoundException($"Key '{key}' not found!");
+        }
+
+        /// <summary>
+        /// Tries to get a value. Returns true if found, false otherwise.
+        /// </summary>
+        public bool TryGet(TKey key, out TValue value)
+        {
+            if (key == null) throw new ArgumentNullException(nameof(key));
+
+            int index = GetIndex(key);
+            Node current = buckets[index];
+
+            while (current != null)
+            {
+                if (current.Key.Equals(key))
+                {
+                    value = current.Value;
+                    return true;
+                }
+                current = current.Next;
+            }
+
+            value = default;
+            return false;
+        }
+
+        /// <summary>
+        /// Removes a key from the table. Returns true if removed, false if key not found.
+        /// </summary>
+        public bool Remove(TKey key)
+        {
+            if (key == null) throw new ArgumentNullException(nameof(key));
+
+            int index = GetIndex(key);
+            Node current = buckets[index];
+            Node previous = null;
+
+            while (current != null)
+            {
+                if (current.Key.Equals(key))
+                {
+                    if (previous == null)
+                        buckets[index] = current.Next; // Remove head node
+                    else
+                        previous.Next = current.Next; // Remove middle or last node
+
+                    count--;
+                    return true;
+                }
+                previous = current;
+                current = current.Next;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Checks if a key exists in the table.
+        /// </summary>
+        public bool ContainsKey(TKey key)
+        {
+            if (key == null) throw new ArgumentNullException(nameof(key));
+
+            int index = GetIndex(key);
+            Node current = buckets[index];
+
+            while (current != null)
+            {
+                if (current.Key.Equals(key)) return true;
+                current = current.Next;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Resizes the hash table when it reaches the load factor limit.
+        /// </summary>
+        private void Resize(int newCapacity)
+        {
+            var newTable = new SimpleHashTable<TKey, TValue>(newCapacity);
+
+            foreach (var key in GetAllKeys())
+            {
+                newTable.Add(key, Get(key));
+            }
+
+            buckets = newTable.buckets;
+            capacity = newTable.capacity;
+        }
+
+        /// <summary>
+        /// Returns a list of all keys in the table.
+        /// </summary>
+        public IEnumerable<TKey> GetAllKeys()
+        {
+            var keys = new List<TKey>();
+
+            foreach (var bucket in buckets)
+            {
+                Node current = bucket;
+                while (current != null)
+                {
+                    keys.Add(current.Key);
+                    current = current.Next;
+                }
+            }
+
+            return keys;
+        }
+
+        /// <summary>
+        /// Clears all entries from the table.
+        /// </summary>
+        public void Clear()
+        {
+            Array.Fill(buckets, null);
+            count = 0;
+        }
+    }
+
+    // DEMO
+    class Program
+    {
+        static void Main()
+        {
+            var table = new SimpleHashTable<string, int>();
+
+            // Adding values
+            table.Add("apple", 10);
+            table.Add("banana", 20);
+            table.Add("cherry", 30);
+
+            // Retrieving values
+            Console.WriteLine($"Apple: {table.Get("apple")}");
+            Console.WriteLine($"Banana: {table.Get("banana")}");
+
+            // Checking existence
+            Console.WriteLine($"Contains 'grape': {table.ContainsKey("grape")}");
+
+            // TryGet method
+            if (table.TryGet("cherry", out int value))
+                Console
